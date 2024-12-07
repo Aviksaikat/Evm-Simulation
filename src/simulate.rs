@@ -1,4 +1,3 @@
-use crate::IUniswapV2Router::swapExactTokensForTokensCall;
 use alloy::contract::{ContractInstance, Interface};
 use alloy::eips::{BlockId, BlockNumberOrTag};
 use alloy::network::primitives::BlockTransactionsKind;
@@ -16,6 +15,7 @@ use dotenv::dotenv;
 use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
+use crate::IUniswapV2Router::swapExactTokensForTokensCall;
 
 // PANCAKESWAP V2 Router ABI and address
 const PANCAKESWAP_V2_ROUTER_ADDRESS: Address = address!("10ED43C718714eb63d5aA57B78B54704E256024E");
@@ -251,7 +251,7 @@ async fn main() -> Result<()> {
     anvil_provider
         .anvil_set_balance(alice, amount_in * U256::from(2000))
         .await?;
-    let path = vec![WBNB_ADDRESS, USDT_ADDRESS, WBNB_ADDRESS];
+    let path = vec![WBNB_ADDRESS, USDT_ADDRESS];
     // let block = provider
     //     .get_block(BlockId::latest(), BlockTransactionsKind::Hashes)
     //     .await?
@@ -342,6 +342,7 @@ async fn main() -> Result<()> {
     //
     // let wbnb_balance = wbnb.balanceOf(*contract.address()).call().await?._0;
     // println!("WBNB balance of Contract: {wbnb_balance}");
+
 
     // Create the helper contract call
     // let helper_call = IUniswapV2Router::swapExactTokensForTokensCall::new((amount_in * U256::from(20), U256::ZERO, path.clone(), alice, U256::from(100)));

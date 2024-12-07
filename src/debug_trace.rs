@@ -1,12 +1,10 @@
-use alloy::contract::{ContractInstance, Interface};
 use alloy::eips::{BlockId, BlockNumberOrTag};
-use alloy::network::primitives::BlockTransactionsKind;
 use alloy::network::TransactionBuilder;
 use alloy::node_bindings::Anvil;
 use alloy::primitives::{address, Address, Bytes, U256};
 use alloy::providers::ext::{AnvilApi, DebugApi, TraceApi};
 use alloy::providers::{Provider, ProviderBuilder, WalletProvider};
-use alloy::rpc::types::trace::geth::{GethDebugTracingCallOptions, GethDebugTracingOptions};
+use alloy::rpc::types::trace::geth::GethDebugTracingCallOptions;
 use alloy::rpc::types::TransactionRequest;
 use alloy::sol;
 use alloy::sol_types::{SolCall, SolValue};
@@ -61,7 +59,6 @@ const PANCAKESWAP_V2_ROUTER_ADDRESS: Address = address!("10ED43C718714eb63d5aA57
 // WBNB and USDT addresses on BSC
 const WBNB_ADDRESS: Address = address!("bb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c");
 const USDT_ADDRESS: Address = address!("55d398326f99059fF775485246999027B3197955");
-const BUSD_ADDRESS: Address = address!("e9e7CEA3DedcA5984780Bafc599bD69ADd087D56");
 
 sol! {
 
@@ -78,7 +75,7 @@ sol! {
     //     function transferFrom(address from, address to, uint256 amount) external returns (bool);
     //     function balanceOf(address account) external view returns (uint256);
     // }
-
+    //
     // interface IUniswapV2Router {
     //     function swapExactTokensForTokens(
     //         uint256 amountIn,
@@ -179,14 +176,6 @@ sol!(
     "foundry_test/out/IWETH.sol/IWETH.json"
 );
 
-sol!(
-    #[allow(missing_docs)]
-    #[sol(rpc)]
-    #[derive(Debug, PartialEq, Eq)]
-    IUniswapV2Router,
-    "foundry_test/out/IUniswapV2Router.sol/IUniswapV2Router.json"
-);
-
 // sol!("contract/SwapHelper.sol");
 
 pub fn build_tx(
@@ -241,8 +230,8 @@ async fn main() -> Result<()> {
     // let value = U256::from_str(&*parse_units("1000", 18).unwrap().to_string())?;
     // anvil_provider.anvil_set_balance(from, value).await?;
 
-    // let contract = PancakeV2SwapExamples::deploy(anvil_provider.clone()).await?;
-    // println!("Helper contract deployed at: {}", contract.address());
+    let contract = PancakeV2SwapExamples::deploy(anvil_provider.clone()).await?;
+    println!("Helper contract deployed at: {}", contract.address());
 
     // Prepare swap parameters
     // 1 bnb
@@ -250,7 +239,7 @@ async fn main() -> Result<()> {
     anvil_provider
         .anvil_set_balance(alice, amount_in * U256::from(2000))
         .await?;
-    let path = vec![WBNB_ADDRESS, USDT_ADDRESS];
+    // let path = vec![WBNB_ADDRESS, USDT_ADDRESS];
     // let block = provider
     //     .get_block(BlockId::latest(), BlockTransactionsKind::Hashes)
     //     .await?
@@ -258,94 +247,15 @@ async fn main() -> Result<()> {
 
     let wbnb = IWETH::new(WBNB_ADDRESS, anvil_provider.clone());
     println!("WBNB deployed at: {}", wbnb.address());
-    let usdt = IERC20::new(USDT_ADDRESS, anvil_provider.clone());
-    println!("USDT deployed at: {}", usdt.address());
-    let router = IUniswapV2Router::new(PANCAKESWAP_V2_ROUTER_ADDRESS, anvil_provider.clone());
-    println!("Router deployed at: {}", router.address());
+    wbnb.deposit().value(amount_in).from(alice).call().await?;
 
-    let deposit_tx = wbnb
-        .deposit()
-        .value(amount_in * U256::from(20))
-        .from(alice)
-        .send()
-        .await?;
-    println!("Deposit tx sent: {:?}", deposit_tx.tx_hash());
-    let receipt = deposit_tx.get_receipt().await?;
-    println!(
-        "Transaction included in block {}",
-        receipt.block_number.expect("Failed to get block number")
-    );
-    let wbnb_balance = wbnb.balanceOf(alice).call().await?._0;
-    println!("WBNB balance of alice: {wbnb_balance}");
-
-    let approve_tx = wbnb
-        .approve(*router.address(), amount_in * U256::from(20))
-        .from(alice)
-        .send()
-        .await?;
-    println!("Approve tx sent: {:?}", approve_tx.tx_hash());
-
-    let receipt = approve_tx.get_receipt().await?;
-    println!(
-        "Transaction included in block {}",
-        receipt.block_number.expect("Failed to get block number")
-    );
-    let block = anvil_provider
-        .get_block(BlockId::latest(), BlockTransactionsKind::Hashes)
-        .await?
-        .unwrap();
-    let deadline = U256::from(block.header.timestamp + 60);
-    let swap_tx = router
-        .swapExactTokensForTokens(
-            amount_in * U256::from(20),
-            U256::ZERO,
-            path.clone(),
-            alice,
-            deadline,
-        )
-        .from(alice)
-        .send()
-        .await?;
-    println!("Swap tx sent: {:?}", swap_tx.tx_hash());
-
-    // Store the hash before getting the receipt since get_receipt consumes swap_tx
-    let tx_hash = *swap_tx.tx_hash();
-
-    let receipt = swap_tx.get_receipt().await?;
-    println!(
-        "Transaction included in block {}",
-        receipt.block_number.expect("Failed to get block number")
-    );
-
-    let wbnb_balance = wbnb.balanceOf(alice).call().await?._0;
-    println!("WBNB balance of Alice: {wbnb_balance}");
-    let usdt_balance = usdt.balanceOf(alice).call().await?._0;
-    println!("USDT balance of Alice: {usdt_balance}");
-
-    // Use the stored hash instead of trying to access swap_tx again
-    let default_options = GethDebugTracingOptions::default();
-    let result = anvil_provider
-        .debug_trace_transaction(tx_hash, default_options)
-        .await?;
-
-    println!("DEFAULT_TRACE: {result:?}");
-
-    // let deposit_tx = wbnb.transfer(*contract.address(), amount_in * U256::from(20)).from(alice).send().await?;
-    // println!("Deposited to contract tx sent: {:?}", deposit_tx.tx_hash());
-    //
-    // let receipt = deposit_tx.get_receipt().await?;
-    // println!(
-    //     "Transaction included in block {}",
-    //     receipt.block_number.expect("Failed to get block number")
-    // );
-    //
-    // let wbnb_balance = wbnb.balanceOf(*contract.address()).call().await?._0;
-    // println!("WBNB balance of Contract: {wbnb_balance}");
+    let balance = wbnb.balanceOf(alice).call().await?._0;
+    println!("Balance of alice: {balance}");
 
     // Create the helper contract call
-    // let helper_call = PancakeV2SwapExamples::doSwapCall::new(());
-    //
-    // let call_data = PancakeV2SwapExamples::doSwapCall::abi_encode(&helper_call).into();
+    let helper_call = PancakeV2SwapExamples::doSwapCall::new(());
+
+    let call_data = PancakeV2SwapExamples::doSwapCall::abi_encode(&helper_call).into();
     // let gas_price = anvil_provider.get_gas_price().await?;
     // let send_eth_tx = build_tx(*contract.address(), alice, "".parse()?, amount_in,gas_price + 1);
     // anvil_provider.anvil_set_nonce(*contract.address(), U256::from(1123)).await?;
@@ -358,20 +268,23 @@ async fn main() -> Result<()> {
     // let decoded = swapExactTokensForTokensCall::abi_decode(&tx, false)?;
     // println!("{decoded:?}");
 
-    // let helper_call = IUniswapV2Router::swapExactTokensForTokensCall::new((amount_in * U256::from(20), U256::ZERO, path.clone(), alice, U256::from(100)));
-    // let call_data = IUniswapV2Router::swapExactTokensForTokensCall::abi_encode(&helper_call).into();
-    //
-    // let gas_price = anvil_provider.get_gas_price().await?;
-    // // println!("Gas price {gas_price}");
-    // let tx = build_tx(*router.address(), alice, call_data, amount_in, gas_price + 1);
-    //
-    // // let block = BlockId::Number(BlockNumberOrTag::Latest);
-    // // let trace_options = GethDebugTracingCallOptions::default();
-    // // let result = anvil_provider
-    // //     .debug_trace_call(tx.clone(), block, trace_options)
-    // //     .await?;
-    // let result = anvil_provider.call(&tx).await?;
-    // println!("Swap simulation result: {:?}", result);
+    let gas_price = anvil_provider.get_gas_price().await?;
+    // println!("Gas price {gas_price}");
+    let tx = build_tx(
+        *contract.address(),
+        alice,
+        call_data,
+        amount_in,
+        gas_price + 1,
+    );
+
+    // let block = BlockId::Number(BlockNumberOrTag::Latest);
+    // let trace_options = GethDebugTracingCallOptions::default();
+    // let result = anvil_provider
+    //     .debug_trace_call(tx.clone(), block, trace_options)
+    //     .await?;
+    let result = anvil_provider.call(&tx).await?;
+    println!("Swap simulation result: {:?}", result);
     // let amount_out = decode_quote_response(result)?;
     // println!("Amounts Out: {amount_out}");
 

@@ -10,5 +10,3 @@ anyhow = "1.0.94"
 dotenv = "0.15.0"
 #loom-node-debug-provider = { git = "https://github.com/dexloom/loom/", version = "0.4.0" }
 tokio = { version = "1.0.0", features = ["rt", "rt-multi-thread", "macros", "full"] }
-chrono = "0.4.38"
-hex = "0.4.3"
